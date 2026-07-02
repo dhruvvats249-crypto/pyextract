@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="page-badge">✅ Email Intelligence</div>
+<h1 class="page-title">Mail Verifier</h1>
+<p class="page-sub">Check if emails are real, have valid MX records, and can actually receive mail</p>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+
+  <!-- SINGLE VERIFY -->
+  <div class="card">
+    <div class="card-eyebrow">Single Check</div>
+    <div class="card-title">Verify one email</div>
+    <div class="card-sub">Instant real-time verification via SMTP handshake</div>
+
+    <div class="field">
+      <label>Email address</label>
+      <input type="email" id="singleEmail" placeholder="name@company.com">
+    </div>
+    <button class="btn" onclick="verifySingle()">🔍 Verify email</button>
+
+    <div id="singleResult" style="margin-top:1.2rem"></div>
+  </div>
+
+  <!-- HOW IT WORKS -->
+  <div class="card">
+    <div class="card-eyebrow">How it works</div>
+    <div class="card-title">3-layer verification</div>
+    <div class="card-sub">Each email goes through three checks before a verdict</div>
+
+    <div style="display:flex;flex-direction:column;gap:12px;margin-top:.5rem">
+      <div style="display:flex;gap:12px;align-items:flex-start">
+        <div style="width:32px;height:32px;border-radius:8px;background:var(--blue-bg);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--blue);font-weight:700">1</div>
+        <div><div style="font-weight:600;font-size:14px">Format check</div><div style="font-size:12px;color:var(--muted2);margin-top:2px">Validates the email structure with regex</div></div>
+      </div>
+      <div style="display:flex;gap:12px;align-items:flex-start">
+        <div style="width:32px;height:32px;border-radius:8px;background:var(--green-bg);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--green);font-weight:700">2</div>
+        <div><div style="font-weight:600;font-size:14px">MX record lookup</div><div style="font-size:12px;color:var(--muted2);margin-top:2px">Checks if the domain has mail servers via DNS</div></div>
+      </div>
+      <div style="display:flex;gap:12px;align-items:flex-start">
+        <div style="width:32px;height:32px;border-radius:8px;background:var(--amber-bg);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--amber);font-weight:700">3</div>
+        <div><div style="font-weight:600;font-size:14px">SMTP handshake</div><div style="font-size:12px;color:var(--muted2);margin-top:2px">Connects to the mail server and checks if the mailbox exists</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- BULK VERIFY -->
+<div class="card">
+  <div class="card-eyebrow">Bulk Verification</div>
+  <div class="card-title">Verify multiple emails</div>
+  <div class="card-sub">Paste a list of emails — one per line — and verify them all at once</div>
+
+  <div class="field">
+    <label>Email list</label>
+    <textarea id="bulkEmails" rows="6" placeholder="john@company.com&#10;sara@startup.io&#10;info@agency.com"></textarea>
+  </div>
+
+  <button class="btn" onclick="verifyBulk()" id="bulkBtn">✅ Verify all emails</button>
+
+  <div id="bulkProgress" style="display:none;margin-top:1rem">
+    <div class="alert alert-info">⏳ Verifying emails — this may take a minute...</div>
+  </div>
+
+  <div id="bulkSummary" style="display:none;margin-top:1.2rem"></div>
+  <div id="bulkResults" style="margin-top:1rem"></div>
+</div>
+
+<style>
+.verify-card{
+  border:1px solid var(--border);border-radius:var(--radius-sm);
+  padding:1rem 1.2rem;margin-bottom:8px;
+  display:flex;align-items:center;gap:14px;
+  animation:slideUp .3s ease;transition:border-color .2s;
+}
+.verify-card:hover{border-color:var(--border2)}
+.verify-score{
+  width:46px;height:46px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--mono);font-size:13px;font-weight:700;flex-shrink:0;
+}
+.score-high{background:var(--green-bg);color:var(--green);border:1px solid #22d3a525}
+.score-mid{background:var(--amber-bg);color:var(--amber);border:1px solid #fbbf2425}
+.score-low{background:var(--red-bg);color:var(--red);border:1px solid #f8717125}
+.check-tick{width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;flex-shrink:0}
+.tick-ok{background:var(--green-bg);color:var(--green)}
+.tick-fail{background:var(--red-bg);color:var(--red)}
+</style>
+
+<script>
+async function verifySingle() {
+  const email = document.getElementById('singleEmail').value.trim();
+  if (!email) return;
+  document.getElementById('singleResult').innerHTML = '<div class="alert alert-info">⏳ Verifying...</div>';
+  const res = await fetch('/api/verify-single', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({email})
+  });
+  const r = await res.json();
+  document.getElementById('singleResult').innerHTML = renderVerifyCard(r);
+}
+
+async function verifyBulk() {
+  const text = document.getElementById('bulkEmails').value.trim();
+  if (!text) return;
+  const emails = text.split('\n').map(e=>e.trim()).filter(Boolean);
+  document.getElementById('bulkBtn').disabled = true;
+  document.getElementById('bulkProgress').style.display = 'block';
+  document.getElementById('bulkResults').innerHTML = '';
+  document.getElementById('bulkSummary').style.display = 'none';
+
+  const res = await fetch('/api/verify-emails', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({emails})
+  });
+  const data = await res.json();
+
+  document.getElementById('bulkProgress').style.display = 'none';
+  document.getElementById('bulkBtn').disabled = false;
+
+  const results = data.results;
+  const valid = results.filter(r => r.score >= 60).length;
+  const risky = results.filter(r => r.score >= 30 && r.score < 60).length;
+  const invalid = results.filter(r => r.score < 30).length;
+
+  document.getElementById('bulkSummary').style.display = 'block';
+  document.getElementById('bulkSummary').innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:1rem">
+      <div style="background:var(--green-bg);border:1px solid #22d3a520;border-radius:10px;padding:1rem;text-align:center">
+        <div style="font-family:var(--mono);font-size:1.5rem;font-weight:700;color:var(--green)">${valid}</div>
+        <div style="font-size:12px;color:var(--muted2);margin-top:4px">Valid</div>
+      </div>
+      <div style="background:var(--amber-bg);border:1px solid #fbbf2420;border-radius:10px;padding:1rem;text-align:center">
+        <div style="font-family:var(--mono);font-size:1.5rem;font-weight:700;color:var(--amber)">${risky}</div>
+        <div style="font-size:12px;color:var(--muted2);margin-top:4px">Risky</div>
+      </div>
+      <div style="background:var(--red-bg);border:1px solid #f8717120;border-radius:10px;padding:1rem;text-align:center">
+        <div style="font-family:var(--mono);font-size:1.5rem;font-weight:700;color:var(--red)">${invalid}</div>
+        <div style="font-size:12px;color:var(--muted2);margin-top:4px">Invalid</div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('bulkResults').innerHTML = results.map(r => renderVerifyCard(r)).join('');
+}
+
+function renderVerifyCard(r) {
+  const score = r.score || 0;
+  const scoreClass = score >= 60 ? 'score-high' : score >= 30 ? 'score-mid' : 'score-low';
+  const statusLabel = score >= 60 ? 'Valid' : score >= 30 ? 'Risky' : 'Invalid';
+  const statusClass = score >= 60 ? 'badge-green' : score >= 30 ? 'badge-amber' : 'badge-red';
+
+  return `
+    <div class="verify-card">
+      <div class="verify-score ${scoreClass}">${score}%</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px;font-family:var(--mono)">${r.email}</div>
+        <div style="font-size:12px;color:var(--muted2);margin-bottom:6px">${r.reason || 'Checking...'}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <span style="display:flex;align-items:center;gap:4px;font-size:11px;color:${r.valid_format ? 'var(--green)':'var(--red)'}">
+            <span class="check-tick ${r.valid_format?'tick-ok':'tick-fail'}">${r.valid_format?'✓':'✕'}</span> Format
+          </span>
+          <span style="display:flex;align-items:center;gap:4px;font-size:11px;color:${r.has_mx ? 'var(--green)':'var(--red)'}">
+            <span class="check-tick ${r.has_mx?'tick-ok':'tick-fail'}">${r.has_mx?'✓':'✕'}</span> MX Record
+          </span>
+          <span style="display:flex;align-items:center;gap:4px;font-size:11px;color:${r.deliverable ? 'var(--green)':'var(--muted2)'}">
+            <span class="check-tick ${r.deliverable?'tick-ok':'tick-fail'}">${r.deliverable?'✓':'?'}</span> Deliverable
+          </span>
+        </div>
+      </div>
+      <span class="badge ${statusClass}">${statusLabel}</span>
+    </div>
+  `;
+}
+</script>
+
+{% endblock %}

@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Login — PyExtract</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#070b13;--card:#0d1421;--border:#ffffff0d;--border2:#ffffff18;
+  --text:#f1f5ff;--muted:#7b8db0;--muted2:#3d4f70;
+  --blue:#4f9cf9;--blue2:#2563eb;--blue-bg:#4f9cf910;
+  --green:#22d3a5;--red:#f87171;--radius:14px;--radius-sm:9px;
+}
+html,body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;align-items:center;justify-content:center}
+
+.bg-grid{position:fixed;inset:0;background-image:linear-gradient(rgba(79,156,249,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(79,156,249,0.03) 1px,transparent 1px);background-size:60px 60px;pointer-events:none}
+.bg-glow{position:fixed;top:-200px;right:-200px;width:600px;height:600px;background:radial-gradient(circle,rgba(79,156,249,0.07) 0%,transparent 70%);pointer-events:none;animation:pulse 6s ease-in-out infinite}
+.bg-glow2{position:fixed;bottom:-200px;left:-100px;width:500px;height:500px;background:radial-gradient(circle,rgba(34,211,165,0.05) 0%,transparent 70%);pointer-events:none;animation:pulse 8s ease-in-out infinite reverse}
+@keyframes pulse{0%,100%{opacity:.6;transform:scale(1)}50%{opacity:1;transform:scale(1.1)}}
+
+.auth-wrap{position:relative;z-index:1;width:100%;max-width:420px;padding:1.5rem;animation:fadeUp .4s ease}
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+
+.brand{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:2rem}
+.brand-icon{width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,#4f9cf9,#2563eb);display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 0 24px rgba(79,156,249,0.4);animation:glow 3s ease-in-out infinite}
+@keyframes glow{0%,100%{box-shadow:0 0 20px rgba(79,156,249,0.3)}50%{box-shadow:0 0 35px rgba(79,156,249,0.6)}}
+.brand-name{font-size:20px;font-weight:800;letter-spacing:-.3px}
+
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:2rem;box-shadow:0 8px 32px rgba(0,0,0,0.3)}
+.card-title{font-size:1.4rem;font-weight:800;color:var(--text);margin-bottom:.3rem;letter-spacing:-.3px}
+.card-sub{font-size:13px;color:var(--muted);margin-bottom:1.8rem}
+
+.field{margin-bottom:1.1rem}
+label{font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px}
+input{width:100%;background:#080d17;border:1px solid var(--border2);border-radius:var(--radius-sm);color:var(--text);font-family:'Inter',sans-serif;font-size:14px;padding:11px 13px;transition:border-color .2s,box-shadow .2s}
+input:focus{outline:none;border-color:#4f9cf950;box-shadow:0 0 0 3px rgba(79,156,249,0.08)}
+
+.btn{width:100%;background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff;border:none;border-radius:var(--radius-sm);font-weight:700;font-size:15px;padding:.75rem;cursor:pointer;transition:all .2s;font-family:'Inter',sans-serif;box-shadow:0 4px 15px rgba(79,156,249,0.3);position:relative;overflow:hidden;margin-top:.5rem}
+.btn::after{content:'';position:absolute;top:-50%;left:-60%;width:40%;height:200%;background:rgba(255,255,255,0.12);transform:skewX(-20deg);transition:left .4s}
+.btn:hover::after{left:120%}
+.btn:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(79,156,249,0.4)}
+
+.divider{display:flex;align-items:center;gap:12px;margin:1.4rem 0;color:var(--muted2);font-size:12px}
+.divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border)}
+
+.link-row{text-align:center;margin-top:1.2rem;font-size:13px;color:var(--muted)}
+.link-row a{color:var(--blue);font-weight:600;text-decoration:none}
+.link-row a:hover{text-decoration:underline}
+
+.checkbox-row{display:flex;align-items:center;gap:8px;margin-bottom:1rem}
+.checkbox-row input{width:auto}
+.checkbox-row label{font-size:13px;color:var(--muted);text-transform:none;letter-spacing:0;margin:0}
+
+/* Flash messages */
+.flashes{list-style:none;margin-bottom:1.2rem}
+.flash{padding:10px 14px;border-radius:var(--radius-sm);font-size:13px;margin-bottom:6px;display:flex;align-items:center;gap:8px}
+.flash.error{background:#f8717115;border:1px solid #f8717130;color:var(--red)}
+.flash.success{background:#22d3a515;border:1px solid #22d3a530;color:var(--green)}
+.flash.info{background:#4f9cf915;border:1px solid #4f9cf930;color:var(--blue)}
+</style>
+</head>
+<body>
+<div class="bg-grid"></div>
+<div class="bg-glow"></div>
+<div class="bg-glow2"></div>
+
+<div class="auth-wrap">
+  <div class="brand">
+    <div class="brand-icon">⚡</div>
+    <div class="brand-name">PyExtract</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Welcome back</div>
+    <div class="card-sub">Sign in to your account to continue</div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <ul class="flashes">
+          {% for category, message in messages %}
+            <li class="flash {{ category }}">{{ message }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    {% endwith %}
+
+    <form method="POST" action="/login">
+      <div class="field">
+        <label>Email address</label>
+        <input type="email" name="email" placeholder="you@example.com" required autofocus>
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input type="password" name="password" placeholder="••••••••" required>
+      </div>
+      <div class="checkbox-row">
+        <input type="checkbox" name="remember" id="remember">
+        <label for="remember">Remember me for 30 days</label>
+      </div>
+      <button class="btn" type="submit">Sign in →</button>
+    </form>
+
+    <div class="link-row">
+      Don't have an account? <a href="/register">Create one free</a>
+    </div>
+  </div>
+</div>
+</body>
+</html>

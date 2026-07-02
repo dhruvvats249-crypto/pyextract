@@ -1,0 +1,8 @@
+flask
+flask-login
+flask-bcrypt
+requests
+beautifulsoup4
+dnspython
+groq
+gunicorn

@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="page-badge">🔍 Lead Generation</div>
+<h1 class="page-title">Web Scraper</h1>
+<p class="page-sub">Extract emails from any public website — contact pages, team pages, about pages</p>
+
+<div class="card">
+  <div class="card-eyebrow">Target URLs</div>
+  <div class="card-title">Scrape emails from the web</div>
+  <div class="card-sub">Paste one URL per line — try company contact or team pages for best results</div>
+
+  <div class="field">
+    <textarea id="urls" rows="7" placeholder="https://company.com/contact&#10;https://startup.io/team&#10;https://agency.com/about-us"></textarea>
+  </div>
+
+  <button class="btn" id="scrapeBtn" onclick="scrapeNow()">🔍 Scrape now</button>
+
+  <div id="scrapeProgress" style="display:none;margin-top:1.2rem">
+    <div class="alert alert-info">⏳ Scraping in progress...</div>
+  </div>
+
+  <div id="scrapeLog" class="log-box" style="display:none;margin-top:1rem"></div>
+
+  <div id="resultsSection" style="display:none;margin-top:1.5rem">
+    <div class="divider"></div>
+    <div class="card-eyebrow">Results</div>
+    <div class="card-title" id="resultsCount"></div>
+    <div id="resultsTable" style="margin:1rem 0"></div>
+    <div style="display:flex;gap:10px">
+      <button class="btn" onclick="downloadCsv()">⬇️ Download CSV</button>
+      <button class="btn btn-outline" onclick="verifyScraped()">✅ Verify these emails</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let scrapedResults = [];
+
+async function scrapeNow() {
+  const urlsText = document.getElementById('urls').value.trim();
+  if (!urlsText) return;
+  const urls = urlsText.split('\n').map(u=>u.trim()).filter(Boolean);
+
+  document.getElementById('scrapeBtn').disabled = true;
+  document.getElementById('scrapeProgress').style.display = 'block';
+  document.getElementById('scrapeLog').style.display = 'none';
+  document.getElementById('resultsSection').style.display = 'none';
+
+  const res  = await fetch('/api/scrape', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({urls})});
+  const data = await res.json();
+
+  document.getElementById('scrapeProgress').style.display = 'none';
+  document.getElementById('scrapeBtn').disabled = false;
+
+  const logBox = document.getElementById('scrapeLog');
+  logBox.style.display = 'flex';
+  logBox.innerHTML = data.log.map(l =>
+    `<div class="log-line ${l.status==='ok'?'ok':'fail'}">${l.status==='ok'?'✓':'✗'} ${l.text}</div>`
+  ).join('');
+
+  scrapedResults = data.results;
+  document.getElementById('resultsSection').style.display = 'block';
+
+  if (scrapedResults.length) {
+    document.getElementById('resultsCount').textContent = `${scrapedResults.length} emails found`;
+    renderTable(scrapedResults);
+  } else {
+    document.getElementById('resultsCount').textContent = '';
+    document.getElementById('resultsTable').innerHTML = '<div class="alert alert-error">No emails found — try contact, team, or about pages instead</div>';
+  }
+}
+
+function renderTable(rows) {
+  const cols = Object.keys(rows[0]);
+  let html = '<div class="table-wrap"><table><thead><tr>';
+  cols.forEach(c => html += `<th>${c}</th>`);
+  html += '</tr></thead><tbody>';
+  rows.forEach(r => {
+    html += '<tr>';
+    cols.forEach(c => html += `<td>${r[c]||''}</td>`);
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+  document.getElementById('resultsTable').innerHTML = html;
+}
+
+async function downloadCsv() {
+  const res  = await fetch('/api/download-csv', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rows:scrapedResults})});
+  const blob = await res.blob();
+  const url  = window.URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = 'scraped_leads.csv'; a.click();
+}
+
+function verifyScraped() {
+  const emails = scrapedResults.map(r => r.email).join('\n');
+  localStorage.setItem('verifyEmails', emails);
+  window.location.href = '/verifier?prefill=1';
+}
+</script>
+
+{% endblock %}

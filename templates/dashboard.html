@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="page-badge">⚡ Live Overview</div>
+<h1 class="page-title">Dashboard</h1>
+<p class="page-sub">Real-time stats for your outreach campaigns</p>
+
+<div class="metric-grid">
+  <div class="metric-card m-blue">
+    <div class="metric-label">Total Sent</div>
+    <div class="metric-value" id="cnt-total">{{ total }}</div>
+    <div class="metric-sub">All-time</div>
+  </div>
+  <div class="metric-card m-green">
+    <div class="metric-label">Delivered</div>
+    <div class="metric-value">{{ delivered }}</div>
+    <div class="metric-sub">{{ rate }} success rate</div>
+  </div>
+  <div class="metric-card m-red">
+    <div class="metric-label">Failed</div>
+    <div class="metric-value">{{ failed }}</div>
+    <div class="metric-sub">Bounced or rejected</div>
+  </div>
+  <div class="metric-card m-amber">
+    <div class="metric-label">Companies</div>
+    <div class="metric-value">{{ companies }}</div>
+    <div class="metric-sub">Unique orgs</div>
+  </div>
+  <div class="metric-card m-purple">
+    <div class="metric-label">Opens</div>
+    <div class="metric-value">{{ opens }}</div>
+    <div class="metric-sub">Tracked opens</div>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1.2fr;gap:16px">
+  <div class="card" style="animation-delay:.1s">
+    <div class="card-eyebrow">Get Started</div>
+    <div class="card-title">Quick actions</div>
+    <div class="card-sub">Jump straight into a task</div>
+
+    <a href="/scraper" class="qa-row" style="display:flex;text-decoration:none">
+      <div class="qa-icon">🔍</div>
+      <div><div class="qa-title">Scrape new leads</div><div class="qa-sub">Pull emails from any public website</div></div>
+      <div class="qa-arrow">→</div>
+    </a>
+    <a href="/verifier" class="qa-row" style="display:flex;text-decoration:none">
+      <div class="qa-icon">✅</div>
+      <div><div class="qa-title">Verify emails</div><div class="qa-sub">Check if emails are real and deliverable</div></div>
+      <div class="qa-arrow">→</div>
+    </a>
+    <a href="/send-emails" class="qa-row" style="display:flex;text-decoration:none">
+      <div class="qa-icon">📧</div>
+      <div><div class="qa-title">Launch a campaign</div><div class="qa-sub">Upload CSV and send personalized emails</div></div>
+      <div class="qa-arrow">→</div>
+    </a>
+    <a href="/sent-log" class="qa-row" style="display:flex;text-decoration:none">
+      <div class="qa-icon">📋</div>
+      <div><div class="qa-title">Review sent log</div><div class="qa-sub">Check delivery status and history</div></div>
+      <div class="qa-arrow">→</div>
+    </a>
+  </div>
+
+  <div class="card" style="animation-delay:.15s">
+    <div class="card-eyebrow">Live Feed</div>
+    <div class="card-title">Recent activity</div>
+    <div class="card-sub">Latest sends across all campaigns</div>
+
+    {% if recent %}
+      {% for r in recent %}
+        {% set ok = r[5] == 'sent' %}
+        {% set name = r[2] if r[2] and r[2].strip() else 'Unknown' %}
+        {% set company = r[3] if r[3] else '—' %}
+        <div class="activity-row">
+          <div class="act-icon" style="background:{{ 'var(--green-bg)' if ok else 'var(--red-bg)' }};color:{{ 'var(--green)' if ok else 'var(--red)' }}">
+            {{ name[0]|upper if name != 'Unknown' else '?' }}
+          </div>
+          <div style="flex:1;min-width:0">
+            <div class="act-name">{{ name }}</div>
+            <div class="act-sub">{{ company }} · {{ r[6] }}</div>
+          </div>
+          <span class="act-badge {{ 'badge-green' if ok else 'badge-red' }}">{{ 'Delivered' if ok else 'Failed' }}</span>
+        </div>
+      {% endfor %}
+    {% else %}
+      <div class="alert alert-info">No activity yet — send your first campaign.</div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

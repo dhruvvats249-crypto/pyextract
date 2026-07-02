@@ -1,0 +1,258 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="page-badge">📧 Campaign Manager</div>
+<h1 class="page-title">Send Emails</h1>
+<p class="page-sub">Upload your leads and launch a personalized outreach campaign at scale</p>
+
+<div class="card">
+  <div class="step-label">Step 1</div>
+  <div class="step-title">Upload your leads</div>
+  <div class="step-sub">CSV with columns: first_name, last_name, email, company, title</div>
+
+  <!-- VISIBLE FILE INPUT — always works -->
+  <div style="margin-bottom:1.2rem">
+    <label for="fileInput" style="
+      display:inline-flex;align-items:center;gap:10px;
+      background:var(--bg2);border:1.5px dashed var(--border2);
+      border-radius:var(--radius);padding:2rem 3rem;
+      cursor:pointer;transition:border-color .2s;width:100%;
+      justify-content:center;flex-direction:column;text-align:center;
+    " id="uploadLabel">
+      <span style="font-size:2.5rem">📁</span>
+      <span style="font-size:15px;font-weight:600;color:var(--text)">Click to upload CSV</span>
+      <span style="font-size:12px;color:var(--muted2)">or drag and drop your leads file here</span>
+    </label>
+    <input type="file" id="fileInput" accept=".csv" style="position:absolute;opacity:0;width:0;height:0">
+  </div>
+
+  <div id="uploadResult" style="margin-top:1rem"></div>
+  <div id="leadsTable" style="margin-top:1rem"></div>
+
+  <div id="step2" style="display:none">
+    <div class="divider"></div>
+    <div class="step-label">Step 2</div>
+    <div class="step-title">AI Email Writer</div>
+    <div class="step-sub">Let Gemini AI write a personalized email for your leads automatically</div>
+
+    <div style="display:flex;gap:8px;margin-bottom:1rem;flex-wrap:wrap">
+      <select id="aiTone" style="flex:1;min-width:140px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius-sm);color:var(--text);padding:10px 13px;font-family:var(--sans);font-size:14px">
+        <option value="professional">Professional</option>
+        <option value="friendly">Friendly</option>
+        <option value="direct">Direct & Bold</option>
+        <option value="casual">Casual</option>
+      </select>
+      <select id="aiGoal" style="flex:1;min-width:160px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius-sm);color:var(--text);padding:10px 13px;font-family:var(--sans);font-size:14px">
+        <option value="explore a collaboration opportunity">Collaboration</option>
+        <option value="schedule a 15-minute discovery call">Book a call</option>
+        <option value="offer our services">Offer services</option>
+        <option value="introduce our product">Introduce product</option>
+        <option value="follow up on a previous conversation">Follow up</option>
+      </select>
+      <button class="btn btn-green" type="button" onclick="aiWriteEmail()" id="aiBtn" style="white-space:nowrap">
+        ✨ AI Write Email
+      </button>
+    </div>
+    <div id="aiStatus" style="margin-bottom:.8rem"></div>
+
+    <div class="divider"></div>
+    <div class="step-label">Step 3</div>
+    <div class="step-title">Compose your message</div>
+    <div class="step-sub">Edit the AI email or write your own — use <code style="background:var(--bg2);padding:2px 6px;border-radius:4px;font-family:var(--mono);font-size:12px">{first_name}</code> <code style="background:var(--bg2);padding:2px 6px;border-radius:4px;font-family:var(--mono);font-size:12px">{company}</code> <code style="background:var(--bg2);padding:2px 6px;border-radius:4px;font-family:var(--mono);font-size:12px">{title}</code></div>
+
+    <div class="field">
+      <label>Subject line</label>
+      <input type="text" id="subject" value="Quick question about {company}">
+    </div>
+    <div class="field">
+      <label>Message body</label>
+      <textarea id="body" rows="8">Hi {first_name},
+
+I came across {company} and wanted to reach out about a potential collaboration.
+
+Would you be open to a quick 15-minute call this week?
+
+Best,
+Your Name</textarea>
+    </div>
+
+    <div class="divider"></div>
+    <div class="step-label">Step 4</div>
+    <div class="step-title">Set sending pace</div>
+    <div class="step-sub">Random delay between sends helps avoid spam filters</div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-bottom:1.5rem">
+      <div class="field">
+        <label>Minimum delay — <span id="minVal">3</span>s</label>
+        <input type="range" id="delayMin" min="2" max="15" value="3" oninput="document.getElementById('minVal').textContent=this.value">
+      </div>
+      <div class="field">
+        <label>Maximum delay — <span id="maxVal">8</span>s</label>
+        <input type="range" id="delayMax" min="5" max="30" value="8" oninput="document.getElementById('maxVal').textContent=this.value">
+      </div>
+    </div>
+
+    <div class="divider"></div>
+    <button class="btn" id="launchBtn" onclick="launchCampaign()">🚀 Launch campaign</button>
+
+    <div id="campaignProgress" style="display:none;margin-top:1.5rem">
+      <div class="progress-wrap">
+        <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+        <div class="progress-label" id="progressLabel">Preparing...</div>
+      </div>
+      <div id="statusBox"></div>
+      <div class="log-box" id="logBox"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+let leads = [];
+
+// File upload via label click — works on all browsers
+document.getElementById('fileInput').addEventListener('change', handleFile);
+
+function handleFile(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  document.getElementById('uploadResult').innerHTML =
+    '<div class="alert alert-info">⏳ Loading leads...</div>';
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  fetch('/api/upload-leads', { method: 'POST', body: formData })
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) {
+        document.getElementById('uploadResult').innerHTML =
+          `<div class="alert alert-error">❌ ${data.error}</div>`;
+        return;
+      }
+      leads = data.leads;
+      document.getElementById('uploadLabel').style.borderColor = 'var(--green)';
+      document.getElementById('uploadResult').innerHTML =
+        `<div class="alert alert-success">✓ ${data.count} leads loaded successfully</div>`;
+      renderTable(leads);
+      document.getElementById('step2').style.display = 'block';
+      document.getElementById('step2').scrollIntoView({behavior:'smooth',block:'start'});
+    })
+    .catch(err => {
+      document.getElementById('uploadResult').innerHTML =
+        `<div class="alert alert-error">❌ ${err.message}</div>`;
+    });
+}
+
+function renderTable(rows) {
+  if (!rows.length) return;
+  const cols = Object.keys(rows[0]);
+  let html = '<div class="table-wrap"><table><thead><tr>';
+  cols.forEach(c => html += `<th>${c}</th>`);
+  html += '</tr></thead><tbody>';
+  rows.slice(0,8).forEach(r => {
+    html += '<tr>';
+    cols.forEach(c => html += `<td>${r[c]||''}</td>`);
+    html += '</tr>';
+  });
+  if (rows.length > 8) {
+    html += `<tr><td colspan="${cols.length}" style="color:var(--muted2);text-align:center;font-style:italic">...and ${rows.length-8} more rows</td></tr>`;
+  }
+  html += '</tbody></table></div>';
+  document.getElementById('leadsTable').innerHTML = html;
+}
+
+async function aiWriteEmail() {
+  if (!leads.length) {
+    document.getElementById('aiStatus').innerHTML =
+      '<div class="alert alert-error">⚠️ Upload a CSV first so AI knows who to write to</div>';
+    return;
+  }
+  const btn    = document.getElementById('aiBtn');
+  const tone   = document.getElementById('aiTone').value;
+  const goal   = document.getElementById('aiGoal').value;
+  const sample = leads[0];
+
+  btn.disabled    = true;
+  btn.textContent = '✨ Writing...';
+  document.getElementById('aiStatus').innerHTML =
+    '<div class="alert alert-info">⏳ AI is writing your email...</div>';
+
+  try {
+    const res  = await fetch('/api/ai-write-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        first_name: sample.first_name || 'there',
+        company:    sample.company    || 'your company',
+        title:      sample.title      || 'professional',
+        tone, goal
+      })
+    });
+    const data = await res.json();
+    if (data.error) {
+      document.getElementById('aiStatus').innerHTML =
+        `<div class="alert alert-error">❌ ${data.error}</div>`;
+    } else {
+      document.getElementById('body').value = data.body;
+      document.getElementById('aiStatus').innerHTML =
+        '<div class="alert alert-success">✅ Email written by AI! Edit if needed, then launch.</div>';
+    }
+  } catch (e) {
+    document.getElementById('aiStatus').innerHTML =
+      `<div class="alert alert-error">❌ ${e.message}</div>`;
+  }
+
+  btn.disabled    = false;
+  btn.textContent = '✨ AI Write Email';
+}
+
+async function launchCampaign() {
+  const subject  = document.getElementById('subject').value;
+  const body     = document.getElementById('body').value;
+  const delayMin = document.getElementById('delayMin').value;
+  const delayMax = document.getElementById('delayMax').value;
+
+  document.getElementById('launchBtn').disabled = true;
+  document.getElementById('campaignProgress').style.display = 'block';
+  document.getElementById('logBox').innerHTML = '';
+
+  await fetch('/api/launch-campaign', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ leads, subject, body, delay_min: delayMin, delay_max: delayMax })
+  });
+
+  pollStatus();
+}
+
+function pollStatus() {
+  const interval = setInterval(async () => {
+    const res    = await fetch('/api/campaign-status');
+    const status = await res.json();
+    const pct    = status.total ? (status.progress / status.total) * 100 : 0;
+
+    document.getElementById('progressFill').style.width  = pct + '%';
+    document.getElementById('progressLabel').textContent = status.running
+      ? `Sending ${status.progress} of ${status.total} emails...`
+      : `✓ Campaign complete — ${status.progress} emails processed`;
+
+    document.getElementById('statusBox').innerHTML = status.running
+      ? `<div class="alert alert-info">⏳ Campaign in progress — do not close this tab</div>`
+      : `<div class="alert alert-success">🎉 Campaign complete! Check Sent Log for full results.</div>`;
+
+    const logBox = document.getElementById('logBox');
+    logBox.innerHTML = status.log.map(l =>
+      `<div class="log-line ${l.status==='ok'?'ok':'fail'}">${l.status==='ok'?'✓':'✗'} ${l.text}</div>`
+    ).join('');
+    logBox.scrollTop = logBox.scrollHeight;
+
+    if (!status.running) {
+      clearInterval(interval);
+      document.getElementById('launchBtn').disabled = false;
+    }
+  }, 1000);
+}
+</script>
+
+{% endblock %}

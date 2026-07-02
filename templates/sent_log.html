@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="page-badge">📋 History</div>
+<h1 class="page-title">Sent Log</h1>
+<p class="page-sub">Complete history of every email sent, with status and timestamps</p>
+
+<div class="card">
+  <form method="get" style="display:grid;grid-template-columns:1fr 2fr auto;gap:1rem;align-items:end;margin-bottom:1.5rem">
+    <div class="field" style="margin:0">
+      <label>Status</label>
+      <select name="status">
+        <option value="All" {{ 'selected' if status_filter=='All' }}>All statuses</option>
+        <option value="sent" {{ 'selected' if status_filter=='sent' }}>Sent</option>
+        <option value="failed" {{ 'selected' if status_filter=='failed' }}>Failed</option>
+      </select>
+    </div>
+    <div class="field" style="margin:0">
+      <label>Search</label>
+      <input type="text" name="search" value="{{ search }}" placeholder="Search by email or company...">
+    </div>
+    <button class="btn" type="submit">Filter</button>
+  </form>
+
+  <div style="display:flex;gap:10px;margin-bottom:1.5rem">
+    <a href="/sent-log/export" class="btn btn-outline">⬇️ Export CSV</a>
+  </div>
+
+  <div class="divider"></div>
+
+  {% if rows %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Email</th><th>Name</th><th>Company</th><th>Subject</th><th>Status</th><th>Sent At</th></tr></thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td style="font-family:var(--mono);font-size:12px">{{ r[1] }}</td>
+          <td>{{ r[2] or '—' }}</td>
+          <td>{{ r[3] or '—' }}</td>
+          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r[4] }}</td>
+          <td><span class="badge {{ 'badge-green' if r[5]=='sent' else 'badge-red' }}">{{ r[5] }}</span></td>
+          <td style="font-size:12px;color:var(--muted2)">{{ r[6] }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="alert alert-info">No emails logged yet — launch a campaign to see results here.</div>
+  {% endif %}
+</div>
+
+{% endblock %}
