@@ -60,7 +60,9 @@ def inject_user():
 #  DATABASE
 # ══════════════════════════════════════════════════════
 def get_db():
-    conn = sqlite3.connect("data/sent_log.db")
+    conn = sqlite3.connect("data/sent_log.db", timeout=15)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=15000")
     conn.row_factory = sqlite3.Row
     conn.execute("""CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
