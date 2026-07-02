@@ -1,13 +1,22 @@
 from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for, flash
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_bcrypt import Bcrypt
-import sqlite3, os, smtplib, time, random, threading, uuid, csv, io, requests, re
+import sqlite3, os, smtplib, time, random, threading, uuid, csv, io, requests, re, socket
 import dns.resolver
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from datetime import datetime
 from groq import Groq
 from cryptography.fernet import Fernet
+
+# Render's network doesn't reliably route outbound IPv6, which causes
+# "[Errno 101] Network is unreachable" when connecting to smtp.gmail.com
+# (Gmail's MX records include IPv6 addresses that Python may prefer).
+# Forcing IPv4-only address resolution avoids this entirely.
+_original_getaddrinfo = socket.getaddrinfo
+def _ipv4_only_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+    return _original_getaddrinfo(host, port, socket.AF_INET, type, proto, flags)
+socket.getaddrinfo = _ipv4_only_getaddrinfo
 
 # ── CONFIG ──────────────────────────────────────────
 from dotenv import load_dotenv
