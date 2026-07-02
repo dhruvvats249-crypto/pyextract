@@ -59,10 +59,16 @@ def inject_user():
 # ══════════════════════════════════════════════════════
 #  DATABASE
 # ══════════════════════════════════════════════════════
+# Note: we deliberately do NOT use WAL journal mode here. WAL relies on
+# shared-memory (mmap) locking, which is unreliable on some ephemeral/
+# container filesystems (including Render's), and caused sporadic
+# "database is locked" errors under any concurrent access. The default
+# rollback-journal mode combined with a generous busy_timeout uses only
+# simple file locking and has proven reliable in testing under real
+# concurrent load.
 def get_db():
-    conn = sqlite3.connect("data/sent_log.db", timeout=15)
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA busy_timeout=15000")
+    conn = sqlite3.connect("data/sent_log.db", timeout=20)
+    conn.execute("PRAGMA busy_timeout=20000")
     conn.row_factory = sqlite3.Row
     conn.execute("""CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
