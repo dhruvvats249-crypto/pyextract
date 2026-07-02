@@ -6,3 +6,4 @@ beautifulsoup4
 dnspython
 groq
 gunicorn
+python-dotenv
