@@ -48,7 +48,81 @@
 </div>
 
 <div class="card" style="margin-top:16px">
-  <div class="card-eyebrow">Upgrade</div>
+  <div class="card-eyebrow">Sending</div>
+  <div class="card-title">Connect your Gmail</div>
+  <div class="card-sub">Campaigns send from your own Gmail account, not a shared one</div>
+
+  <div id="emailConfigStatus" style="margin-bottom:1rem">
+    {% if has_email_configured %}
+      <div style="display:flex;align-items:center;gap:10px;background:var(--green-bg,rgba(34,197,94,.08));border:1px solid var(--green);border-radius:var(--radius-sm);padding:.9rem 1rem">
+        <span class="badge badge-green" style="font-size:12px">Connected</span>
+        <span style="font-family:var(--mono);font-size:14px;color:var(--text)">{{ sender_email }}</span>
+      </div>
+    {% else %}
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:.9rem 1rem;font-size:13px;color:var(--muted2)">
+        Not connected yet — you won't be able to launch campaigns until you connect a Gmail account below.
+      </div>
+    {% endif %}
+  </div>
+
+  <form id="emailConfigForm" style="display:flex;flex-direction:column;gap:12px;max-width:420px">
+    <div>
+      <label style="font-size:11px;color:var(--muted2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px">Gmail address</label>
+      <input type="email" id="senderEmail" required placeholder="you@gmail.com"
+             value="{{ sender_email }}"
+             style="width:100%;padding:.7rem .9rem;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:14px">
+    </div>
+    <div>
+      <label style="font-size:11px;color:var(--muted2);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px">Gmail App Password</label>
+      <input type="password" id="senderAppPassword" required placeholder="xxxx xxxx xxxx xxxx"
+             style="width:100%;padding:.7rem .9rem;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:14px">
+      <div style="font-size:11px;color:var(--muted2);margin-top:6px">
+        Not your Gmail password. Generate one at
+        <a href="https://myaccount.google.com/apppasswords" target="_blank" style="color:var(--blue)">myaccount.google.com/apppasswords</a>
+      </div>
+    </div>
+    <div id="emailConfigError" style="display:none;font-size:13px;color:var(--red,#ef4444)"></div>
+    <div style="display:flex;gap:10px;margin-top:4px">
+      <button type="submit" class="btn btn-primary" style="padding:.7rem 1.4rem">Save connection</button>
+      {% if has_email_configured %}
+        <button type="button" id="removeEmailBtn" class="btn" style="padding:.7rem 1.4rem;background:var(--bg2);border:1px solid var(--border);color:var(--muted)">Remove</button>
+      {% endif %}
+    </div>
+  </form>
+</div>
+
+<script>
+document.getElementById('emailConfigForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const errorBox = document.getElementById('emailConfigError');
+  errorBox.style.display = 'none';
+  const res = await fetch('/api/save-email-config', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      sender_email: document.getElementById('senderEmail').value.trim(),
+      sender_app_password: document.getElementById('senderAppPassword').value.trim()
+    })
+  });
+  const data = await res.json();
+  if (data.success) {
+    location.reload();
+  } else {
+    errorBox.textContent = data.error || 'Something went wrong. Please try again.';
+    errorBox.style.display = 'block';
+  }
+});
+
+const removeBtn = document.getElementById('removeEmailBtn');
+if (removeBtn) {
+  removeBtn.addEventListener('click', async () => {
+    if (!confirm('Disconnect this Gmail account? You won\'t be able to send campaigns until you reconnect.')) return;
+    const res = await fetch('/api/remove-email-config', { method: 'POST' });
+    const data = await res.json();
+    if (data.success) location.reload();
+  });
+}
+</script>
   <div class="card-title">Choose your plan</div>
   <div class="card-sub">Unlock more emails and features</div>
 

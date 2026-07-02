@@ -7,19 +7,36 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from datetime import datetime
 from groq import Groq
+from cryptography.fernet import Fernet
 
 # ── CONFIG ──────────────────────────────────────────
 from dotenv import load_dotenv
 load_dotenv()
 
-EMAIL          = os.environ.get("EMAIL_USER", "")
-PASSWORD       = os.environ.get("EMAIL_APP_PASSWORD", "")
 SECRET_KEY     = os.environ.get("FLASK_SECRET_KEY", "")
 GROQ_API_KEY   = os.environ.get("GROQ_API_KEY", "")
 BASE_URL       = os.environ.get("BASE_URL", "http://localhost:5050")
+ENCRYPTION_KEY = os.environ.get("ENCRYPTION_KEY", "")
 
 if not SECRET_KEY:
     raise RuntimeError("FLASK_SECRET_KEY is not set. Add it to your .env file or host's environment variables.")
+if not ENCRYPTION_KEY:
+    raise RuntimeError(
+        "ENCRYPTION_KEY is not set. Generate one with:\n"
+        "  python3 -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\"\n"
+        "and add it to your .env file / host's environment variables."
+    )
+fernet = Fernet(ENCRYPTION_KEY.encode())
+
+def encrypt_secret(plaintext: str) -> str:
+    if not plaintext:
+        return ""
+    return fernet.encrypt(plaintext.encode()).decode()
+
+def decrypt_secret(ciphertext: str) -> str:
+    if not ciphertext:
+        return ""
+    return fernet.decrypt(ciphertext.encode()).decode()
 # ────────────────────────────────────────────────────
 
 app            = Flask(__name__)
@@ -52,8 +69,16 @@ def get_db():
         password TEXT NOT NULL,
         plan TEXT DEFAULT 'free',
         emails_sent INTEGER DEFAULT 0,
+        sender_email TEXT DEFAULT '',
+        sender_app_password_enc TEXT DEFAULT '',
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )""")
+    # Backfill columns for databases created before this feature existed
+    existing_cols = {row["name"] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
+    if "sender_email" not in existing_cols:
+        conn.execute("ALTER TABLE users ADD COLUMN sender_email TEXT DEFAULT ''")
+    if "sender_app_password_enc" not in existing_cols:
+        conn.execute("ALTER TABLE users ADD COLUMN sender_app_password_enc TEXT DEFAULT ''")
     conn.execute("""CREATE TABLE IF NOT EXISTS sent_emails (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER,
@@ -75,12 +100,21 @@ def get_db():
 #  USER MODEL
 # ══════════════════════════════════════════════════════
 class User(UserMixin):
-    def __init__(self, id, username, email, plan, emails_sent):
-        self.id          = id
-        self.username    = username
-        self.email       = email
-        self.plan        = plan
-        self.emails_sent = emails_sent
+    def __init__(self, id, username, email, plan, emails_sent,
+                 sender_email="", sender_app_password_enc=""):
+        self.id                       = id
+        self.username                 = username
+        self.email                    = email
+        self.plan                     = plan
+        self.emails_sent              = emails_sent
+        self.sender_email             = sender_email
+        self.sender_app_password_enc  = sender_app_password_enc
+
+    def has_email_configured(self):
+        return bool(self.sender_email and self.sender_app_password_enc)
+
+    def sender_app_password(self):
+        return decrypt_secret(self.sender_app_password_enc)
 
     def email_limit(self):
         return {"free": 100, "starter": 500, "pro": 5000, "agency": 999999}.get(self.plan, 100)
@@ -97,7 +131,8 @@ def load_user(user_id):
     row  = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
     conn.close()
     if row:
-        return User(row["id"], row["username"], row["email"], row["plan"], row["emails_sent"])
+        return User(row["id"], row["username"], row["email"], row["plan"], row["emails_sent"],
+                     row["sender_email"], row["sender_app_password_enc"])
     return None
 
 # ══════════════════════════════════════════════════════
@@ -114,15 +149,15 @@ def log_result(conn, row, subject, status, user_id):
         conn.execute("UPDATE users SET emails_sent = emails_sent + 1 WHERE id = ?", (user_id,))
     conn.commit()
 
-def send_email_smtp(to, subject, body_html):
+def send_email_smtp(to, subject, body_html, sender_email, sender_password):
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
-    msg["From"]    = EMAIL
+    msg["From"]    = sender_email
     msg["To"]      = to
     msg.attach(MIMEText(body_html, "html"))
     with smtplib.SMTP("smtp.gmail.com", 587) as s:
         s.starttls()
-        s.login(EMAIL, PASSWORD)
+        s.login(sender_email, sender_password)
         s.send_message(msg)
 
 def add_tracking(html_body, email, user_id):
@@ -168,7 +203,7 @@ def verify_email(email):
         result["score"]  = 55
     return result
 
-def run_campaign(leads, subject, body, delay_min, delay_max, user_id):
+def run_campaign(leads, subject, body, delay_min, delay_max, user_id, sender_email, sender_password):
     global campaign_status
     campaign_status[user_id] = {"running":True,"log":[],"progress":0,"total":len(leads)}
     conn = get_db()
@@ -187,7 +222,7 @@ def run_campaign(leads, subject, body, delay_min, delay_max, user_id):
                      .replace("{first_name}",str(row.get("first_name","")))\
                      .replace("{title}",str(row.get("title","")))
             html = add_tracking(pb.replace("\n","<br>"), email, user_id)
-            send_email_smtp(email, ps, html)
+            send_email_smtp(email, ps, html, sender_email, sender_password)
             log_result(conn, row, ps, "sent", user_id)
             campaign_status[user_id]["log"].append({"status":"ok","text":f"{row.get('first_name','')} <{email}> — delivered"})
         except Exception as e:
@@ -360,7 +395,37 @@ def opens_page():
 @app.route("/account")
 @login_required
 def account_page():
-    return render_template("account.html", page="account")
+    return render_template("account.html", page="account",
+        sender_email=current_user.sender_email,
+        has_email_configured=current_user.has_email_configured())
+
+@app.route("/api/save-email-config", methods=["POST"])
+@login_required
+def save_email_config():
+    data            = request.get_json()
+    sender_email    = data.get("sender_email","").strip().lower()
+    sender_password = data.get("sender_app_password","").strip()
+    if not sender_email or not re.match(r'^[\w.+-]+@[\w-]+\.[\w.]+$', sender_email):
+        return jsonify({"error":"Enter a valid email address."}), 400
+    if not sender_password or len(sender_password.replace(" ","")) < 16:
+        return jsonify({"error":"That doesn't look like a valid Gmail App Password. Generate one at https://myaccount.google.com/apppasswords"}), 400
+    encrypted = encrypt_secret(sender_password)
+    conn = get_db()
+    conn.execute("UPDATE users SET sender_email=?, sender_app_password_enc=? WHERE id=?",
+                 (sender_email, encrypted, current_user.id))
+    conn.commit()
+    conn.close()
+    return jsonify({"success":True})
+
+@app.route("/api/remove-email-config", methods=["POST"])
+@login_required
+def remove_email_config():
+    conn = get_db()
+    conn.execute("UPDATE users SET sender_email='', sender_app_password_enc='' WHERE id=?",
+                 (current_user.id,))
+    conn.commit()
+    conn.close()
+    return jsonify({"success":True})
 
 
 # ══════════════════════════════════════════════════════
@@ -411,14 +476,18 @@ def api_verify_emails():
 def launch_campaign():
     if not current_user.can_send():
         return jsonify({"error":"Email limit reached. Upgrade your plan."}), 403
+    if not current_user.has_email_configured():
+        return jsonify({"error":"Connect your Gmail account in Account settings before sending campaigns."}), 400
     data      = request.get_json()
     leads     = data.get("leads",[])
     subject   = data.get("subject","")
     body      = data.get("body","")
     delay_min = float(data.get("delay_min",3))
     delay_max = float(data.get("delay_max",8))
+    sender_email    = current_user.sender_email
+    sender_password = current_user.sender_app_password()
     threading.Thread(target=run_campaign,
-        args=(leads,subject,body,delay_min,delay_max,current_user.id)).start()
+        args=(leads,subject,body,delay_min,delay_max,current_user.id,sender_email,sender_password)).start()
     return jsonify({"started":True})
 
 @app.route("/api/campaign-status")
