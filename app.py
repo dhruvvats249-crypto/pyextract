@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for, flash
+from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for, flash, g, has_app_context
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_bcrypt import Bcrypt
 import sqlite3, os, smtplib, time, random, threading, uuid, csv, io, requests, re, socket
@@ -76,7 +76,14 @@ def inject_user():
 # rollback-journal mode combined with a generous busy_timeout uses only
 # simple file locking and has proven reliable in testing under real
 # concurrent load.
-def get_db():
+# Note: we deliberately do NOT use WAL journal mode here. WAL relies on
+# shared-memory (mmap) locking, which is unreliable on some ephemeral/
+# container filesystems (including Render's), and caused sporadic
+# "database is locked" errors under any concurrent access. The default
+# rollback-journal mode combined with a generous busy_timeout uses only
+# simple file locking and has proven reliable in testing under real
+# concurrent load.
+def _create_connection():
     conn = sqlite3.connect("data/sent_log.db", timeout=20)
     conn.execute("PRAGMA busy_timeout=20000")
     conn.row_factory = sqlite3.Row
@@ -113,6 +120,31 @@ def get_db():
     )""")
     conn.commit()
     return conn
+
+def get_db():
+    # Inside a Flask request: reuse one connection per request, stored on
+    # flask.g, and guarantee it's closed by teardown_appcontext below --
+    # even if the route raises an exception that isn't explicitly caught.
+    # This fixes a real bug where routes like /register only caught
+    # sqlite3.IntegrityError and left the connection open (leaked) on any
+    # other error, which could then block every subsequent request.
+    if has_app_context():
+        if "db" not in g:
+            g.db = _create_connection()
+        return g.db
+    # Outside a request (e.g. the background campaign-sending thread):
+    # no flask.g available, so return a plain connection. Callers in this
+    # context (run_campaign) already explicitly close it when done.
+    return _create_connection()
+
+@app.teardown_appcontext
+def _close_db(exception=None):
+    db = g.pop("db", None)
+    if db is not None:
+        try:
+            db.close()
+        except Exception:
+            pass
 
 # ══════════════════════════════════════════════════════
 #  USER MODEL
