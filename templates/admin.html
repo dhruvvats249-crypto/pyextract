@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="page-badge">🛠️ Admin</div>
+<h1 class="page-title">Admin Panel</h1>
+<p class="page-sub">Manage users and subscription plans</p>
+
+<div class="card">
+  <div class="card-eyebrow">Users</div>
+  <div class="card-title">All accounts</div>
+  <div class="card-sub">{{ users|length }} registered user{{ 's' if users|length != 1 else '' }}</div>
+
+  <div style="overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead>
+        <tr style="border-bottom:1px solid var(--border);text-align:left">
+          <th style="padding:.6rem .5rem;color:var(--muted2);font-weight:600;text-transform:uppercase;font-size:11px;letter-spacing:.5px">User</th>
+          <th style="padding:.6rem .5rem;color:var(--muted2);font-weight:600;text-transform:uppercase;font-size:11px;letter-spacing:.5px">Email</th>
+          <th style="padding:.6rem .5rem;color:var(--muted2);font-weight:600;text-transform:uppercase;font-size:11px;letter-spacing:.5px">Gmail connected</th>
+          <th style="padding:.6rem .5rem;color:var(--muted2);font-weight:600;text-transform:uppercase;font-size:11px;letter-spacing:.5px">Emails sent</th>
+          <th style="padding:.6rem .5rem;color:var(--muted2);font-weight:600;text-transform:uppercase;font-size:11px;letter-spacing:.5px">Plan</th>
+          <th style="padding:.6rem .5rem;color:var(--muted2);font-weight:600;text-transform:uppercase;font-size:11px;letter-spacing:.5px">Joined</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in users %}
+        <tr style="border-bottom:1px solid var(--border)">
+          <td style="padding:.7rem .5rem;font-weight:600">{{ u.username }}</td>
+          <td style="padding:.7rem .5rem;font-family:var(--mono);color:var(--muted)">{{ u.email }}</td>
+          <td style="padding:.7rem .5rem">
+            {% if u.sender_email %}
+              <span class="badge badge-green" style="font-size:11px">{{ u.sender_email }}</span>
+            {% else %}
+              <span style="color:var(--muted2);font-size:12px">Not connected</span>
+            {% endif %}
+          </td>
+          <td style="padding:.7rem .5rem;font-family:var(--mono)">{{ u.emails_sent }}</td>
+          <td style="padding:.7rem .5rem">
+            <select class="plan-select" data-user-id="{{ u.id }}"
+                    style="background:var(--bg2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:.35rem .6rem;font-size:12px;text-transform:capitalize">
+              {% for p in plans %}
+                <option value="{{ p }}" {{ 'selected' if u.plan == p else '' }}>{{ p }}</option>
+              {% endfor %}
+            </select>
+          </td>
+          <td style="padding:.7rem .5rem;color:var(--muted2);font-size:12px">{{ u.created_at }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+document.querySelectorAll('.plan-select').forEach(select => {
+  select.addEventListener('change', async (e) => {
+    const userId = e.target.dataset.userId;
+    const plan = e.target.value;
+    const original = e.target.dataset.original || plan;
+    e.target.disabled = true;
+    try {
+      const res = await fetch('/api/admin/update-plan', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ user_id: userId, plan: plan })
+      });
+      const data = await res.json();
+      if (!data.success) {
+        alert(data.error || 'Failed to update plan.');
+        e.target.value = original;
+      } else {
+        e.target.dataset.original = plan;
+      }
+    } catch (err) {
+      alert('Network error updating plan.');
+      e.target.value = original;
+    } finally {
+      e.target.disabled = false;
+    }
+  });
+});
+</script>
+
+{% endblock %}
