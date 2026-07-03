@@ -26,6 +26,7 @@ SECRET_KEY     = os.environ.get("FLASK_SECRET_KEY", "")
 GROQ_API_KEY   = os.environ.get("GROQ_API_KEY", "")
 BASE_URL       = os.environ.get("BASE_URL", "http://localhost:5050")
 ENCRYPTION_KEY = os.environ.get("ENCRYPTION_KEY", "")
+ADMIN_EMAIL    = os.environ.get("ADMIN_EMAIL", "").strip().lower()
 
 if not SECRET_KEY:
     raise RuntimeError("FLASK_SECRET_KEY is not set. Add it to your .env file or host's environment variables.")
@@ -142,6 +143,9 @@ class User(UserMixin):
     def emails_left(self):
         return max(0, self.email_limit() - self.emails_sent)
 
+    def is_admin(self):
+        return bool(ADMIN_EMAIL) and self.email.strip().lower() == ADMIN_EMAIL
+
 @login_manager.user_loader
 def load_user(user_id):
     conn = get_db()
@@ -169,29 +173,13 @@ def log_result(conn, row, subject, status, user_id):
 def send_email_smtp(to, subject, body_html, sender_email, sender_password):
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
-    msg["From"] = sender_email
-    msg["To"] = to
+    msg["From"]    = sender_email
+    msg["To"]      = to
     msg.attach(MIMEText(body_html, "html"))
-
-    try:
-        print(f"Connecting to Gmail as {sender_email}")
-
-        with smtplib.SMTP("smtp.gmail.com", 587, timeout=30) as s:
-            s.ehlo()
-            s.starttls()
-            s.ehlo()
-
-            print("Logging in...")
-            s.login(sender_email, sender_password)
-
-            print(f"Sending to {to}")
-            s.send_message(msg)
-
-            print("Email sent!")
-
-    except Exception as e:
-        print("SMTP ERROR:", repr(e))
-        raise
+    with smtplib.SMTP("smtp.gmail.com", 587) as s:
+        s.starttls()
+        s.login(sender_email, sender_password)
+        s.send_message(msg)
 
 def add_tracking(html_body, email, user_id):
     token = uuid.uuid4().hex
@@ -459,6 +447,42 @@ def remove_email_config():
     conn.commit()
     conn.close()
     return jsonify({"success":True})
+
+
+# ══════════════════════════════════════════════════════
+#  ADMIN
+# ══════════════════════════════════════════════════════
+VALID_PLANS = {"free", "starter", "pro", "agency"}
+
+@app.route("/admin")
+@login_required
+def admin_page():
+    if not current_user.is_admin():
+        flash("You don't have access to that page.")
+        return redirect(url_for("dashboard"))
+    conn  = get_db()
+    users = conn.execute(
+        "SELECT id, username, email, plan, emails_sent, sender_email, created_at "
+        "FROM users ORDER BY created_at DESC"
+    ).fetchall()
+    conn.close()
+    return render_template("admin.html", page="admin", users=users, plans=sorted(VALID_PLANS))
+
+@app.route("/api/admin/update-plan", methods=["POST"])
+@login_required
+def admin_update_plan():
+    if not current_user.is_admin():
+        return jsonify({"error": "Forbidden"}), 403
+    data       = request.get_json()
+    user_id    = data.get("user_id")
+    new_plan   = str(data.get("plan", "")).strip().lower()
+    if new_plan not in VALID_PLANS:
+        return jsonify({"error": "Invalid plan."}), 400
+    conn = get_db()
+    conn.execute("UPDATE users SET plan=? WHERE id=?", (new_plan, user_id))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True})
 
 
 # ══════════════════════════════════════════════════════
