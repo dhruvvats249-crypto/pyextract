@@ -182,7 +182,6 @@ class User(UserMixin):
 def load_user(user_id):
     conn = get_db()
     row  = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
-    conn.close()
     if row:
         return User(row["id"], row["username"], row["email"], row["plan"], row["emails_sent"],
                      row["sender_email"], row["sender_app_password_enc"])
@@ -344,7 +343,6 @@ def register():
                          (username, email, hashed))
             conn.commit()
             row  = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
-            conn.close()
             user = User(row["id"], row["username"], row["email"], row["plan"], row["emails_sent"])
             login_user(user)
             flash(f"Welcome, {username}! Your account is ready.", "success")
@@ -364,7 +362,6 @@ def login():
         remember = request.form.get("remember") == "on"
         conn = get_db()
         row  = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
-        conn.close()
         if row and bcrypt.check_password_hash(row["password"], password):
             user = User(row["id"], row["username"], row["email"], row["plan"], row["emails_sent"])
             login_user(user, remember=remember)
@@ -391,7 +388,6 @@ def dashboard():
     conn      = get_db()
     rows      = conn.execute("SELECT * FROM sent_emails WHERE user_id=? ORDER BY sent_at DESC", (current_user.id,)).fetchall()
     opens     = conn.execute("SELECT COUNT(*) FROM opens WHERE user_id=?", (current_user.id,)).fetchone()[0]
-    conn.close()
     total     = len(rows)
     delivered = len([r for r in rows if r["status"] == "sent"])
     failed    = len([r for r in rows if str(r["status"]).startswith("failed")])
@@ -433,7 +429,6 @@ def sent_log_page():
         params.extend([f"%{search}%",f"%{search}%"])
     query += " ORDER BY sent_at DESC"
     rows = conn.execute(query, params).fetchall()
-    conn.close()
     return render_template("sent_log.html", rows=rows, page="log",
         status_filter=status_filter, search=search)
 
@@ -442,7 +437,6 @@ def sent_log_page():
 def opens_page():
     conn = get_db()
     rows = conn.execute("SELECT * FROM opens WHERE user_id=? ORDER BY opened_at DESC", (current_user.id,)).fetchall()
-    conn.close()
     return render_template("opens.html", rows=rows, page="opens")
 
 @app.route("/account")
@@ -467,7 +461,6 @@ def save_email_config():
     conn.execute("UPDATE users SET sender_email=?, sender_app_password_enc=? WHERE id=?",
                  (sender_email, encrypted, current_user.id))
     conn.commit()
-    conn.close()
     return jsonify({"success":True})
 
 @app.route("/api/remove-email-config", methods=["POST"])
@@ -477,7 +470,6 @@ def remove_email_config():
     conn.execute("UPDATE users SET sender_email='', sender_app_password_enc='' WHERE id=?",
                  (current_user.id,))
     conn.commit()
-    conn.close()
     return jsonify({"success":True})
 
 
@@ -497,7 +489,6 @@ def admin_page():
         "SELECT id, username, email, plan, emails_sent, sender_email, created_at "
         "FROM users ORDER BY created_at DESC"
     ).fetchall()
-    conn.close()
     return render_template("admin.html", page="admin", users=users, plans=sorted(VALID_PLANS))
 
 @app.route("/api/admin/update-plan", methods=["POST"])
@@ -513,7 +504,6 @@ def admin_update_plan():
     conn = get_db()
     conn.execute("UPDATE users SET plan=? WHERE id=?", (new_plan, user_id))
     conn.commit()
-    conn.close()
     return jsonify({"success": True})
 
 
@@ -630,7 +620,6 @@ def export_sent_log():
     conn = get_db()
     rows = conn.execute("SELECT * FROM sent_emails WHERE user_id=? ORDER BY sent_at DESC",
                         (current_user.id,)).fetchall()
-    conn.close()
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(["id","email","name","company","subject","status","sent_at"])
@@ -648,7 +637,6 @@ def track():
     conn    = get_db()
     conn.execute("INSERT INTO opens (user_id,email,token) VALUES(?,?,?)",(user_id,email,token))
     conn.commit()
-    conn.close()
     pixel = (b'\x47\x49\x46\x38\x39\x61\x01\x00\x01\x00\x80\x00\x00\xff\xff\xff'
               b'\x00\x00\x00\x21\xf9\x04\x00\x00\x00\x00\x00\x2c\x00\x00\x00\x00'
               b'\x01\x00\x01\x00\x00\x02\x02\x44\x01\x00\x3b')
